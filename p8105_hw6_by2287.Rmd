@@ -1,0 +1,23 @@
+---
+title: "p8105_hw6_by2287"
+author: "Binyam Yilma"
+date: "12/6/2020"
+output: github_document
+---
+
+
+```{r, include = FALSE}
+library(tidyverse)
+library(readr)
+library(readxl)
+library(patchwork)
+
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+options(
+ ggplot2.continous.colour = "viridis",
+ ggplot2.continous.fill = "viridis"
+)
+
+scale_colour_discrete = scale_color_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+```
