@@ -10,6 +10,8 @@ library(tidyverse)
 library(readr)
 library(readxl)
 library(purrr)
+library(modelr)
+library(patchwork)
 
 theme_set(theme_minimal() + theme(legend.position = "bottom"))
 options(
@@ -105,5 +107,143 @@ The estimated odds of a homicide case being resolved for male Black victims comp
 
 ```{r}
 
+baby_df = 
+  read_csv("./data/birthweight.csv") %>%
+  mutate(
+    babysex = ifelse(babysex == 1, "male", "female") %>% as.factor(),
+    frace = 
+      case_when(
+        frace == 1 ~ "White",
+        frace == 2 ~ "Black",
+        frace == 3 ~ "Asian",
+        frace == 4 ~ "Puerto Rican",
+        frace == 8 ~ "Other",
+        frace == 9 ~ "Unknown",
+        TRUE ~ ""
+      ) %>% as.factor(),
+    mrace = 
+      case_when(
+        mrace == 1 ~ "White",
+        mrace == 2 ~ "Black",
+        mrace == 3 ~ "Asian",
+        mrace == 4 ~ "Puerto Rican",
+        mrace == 8 ~ "Other",
+        TRUE ~ ""
+      ) %>% as.factor(),
+    delwt = delwt*453.592 %>% round(2)
+  )
+
+```
+Tidying steps: 
+
+* 1 Convert `babysex` to a `factor`
+* 2 Label Father's race, and convert to `factor`
+* 3 Label Mother's race, and convert to `factor`
+* 4 Convert Mother's weight at delivery to `grams` to keep it consistent with baby's `birthweight`
+
+
+Checking for missing values 
+```{r}
+baby_df %>% skimr::skim() %>% select(skim_variable, n_missing, complete_rate) %>% knitr::kable()
+```
+None of the variables contain missing values
+
+
+#### Proposing an initial model for birthweight
+
+Hypothesis driving proposed model: 
+
+An infant's overall health depends on the overall health status of the mother and the mother's physical ability (without considering sociodemographic factors) play important roles in determining the baby's health, and indeed the baby's birthweight. I will treat three factors as proxies of the mother's health status and physical ability: mother's weight, height, and age. 
+
+Therefore, I hypothesize that a baby's birhtweight can eb explained by a mother's weight, adjusting for height and age. I propose to fit a linear model describing this relationship, after assessing the linearity and normality assumption.  
+
+**Normality Assumption**
+Plot the distribution of our outcome variable - `birthweight`
+```{r}
+baby_df %>% 
+  ggplot(aes(x = bwt)) +
+  geom_histogram(binwidth = 5) + 
+  labs(
+    title = "Distribution of Babys' birthweight",
+    y = "Count",
+    x = "Birthweight (in grams)"
+  )
+```
+The histogram of a baby birthweight in the data follows a normal distribution as shown above. 
+
+
+So, initially, we will fit a linear regression, which regresses birthweight on mother's weight at delivery (`delwt`) and mother's height (`mheight`). But before we do that, we will first the linearity assumption of a linear regression by plotting a scatter plot between the outcome variable `birthweight` and these two proposed predictors. 
+
+**Linearity Assumption**
+```{r}
+bwt_delwt = baby_df %>% 
+  ggplot(aes(x = bwt, y = delwt)) + 
+  geom_smooth(se = F) + 
+  geom_point(alpha = 0.1) + 
+    labs(
+    title = "Relationship between Birthweight and Mother's Weight at Delivery ",
+    y = "Mother's weight at Delivery (grams)",
+    x = "Birthweight (in grams)"
+  )
+
+bwt_mheight = baby_df %>% 
+  ggplot(aes(x = bwt, y = mheight)) + 
+  geom_smooth(se = F) + 
+  geom_point(alpha = 0.1) + 
+  labs(
+    title = "Relationship between Birthweight and Mother's Height at Delivery ",
+    y = "Mother's height at Delivery (inches)",
+    x = "Birthweight (in grams)"
+  )
+
+
+bwt_momage = baby_df %>% 
+  ggplot(aes(x = bwt, y = momage)) + 
+  geom_point(alpha = 0.1) + 
+  geom_smooth(se = F) + 
+    labs(
+    title = "Linear relationship between Birthweight and Mother's Age",
+    y = "Mother's age at Delivery (years)",
+    x = "Birthweight (in grams)"
+  )
+
+
+bwt_delwt / bwt_mheight / bwt_momage 
+```
+
+In assessing the linearity assumption between birth-weight and mother's `weight & height`, we see that there is a slight curve around 2000-2500 grams of a baby's birth-weight. But both relationship are mostly linear, so I will assume that linearity has been maintained here for our initial model. The relationship between birth-weight and mother's age, also appears to be mostly linear, with birthweight increasing with an increase in mother's age. I'll assume that the linearity assumption has been met here, as well. 
+
+####Fitting a linear model
+```{r}
+lin_fit = 
+  baby_df %>% 
+lm(bwt ~ delwt + mheight + momage, data = .) 
+```
+model summary
+```{r}
+lin_fit %>% 
+  broom::glance() %>% 
+  knitr::kable(digits = 2)
+```
+model estimates
+```{r}
+lin_fit %>% 
+  broom::tidy() %>% 
+  knitr::kable(digits = 3)
+```
+
+Plottiing residuals vs. fitted values
+```{r}
+
+baby_df %>%  
+  add_residuals(lin_fit) %>% 
+  add_predictions(lin_fit) %>% 
+  ggplot(aes(x = pred, y = resid)) + 
+  geom_point(alpha = .2) + 
+  labs(
+    title = "Fitted Values Vs. Residuals (Linear Model)",
+    x = "Model Predicted Birthweight",
+    y = "Model Residuals"
+  )
 ```
 
