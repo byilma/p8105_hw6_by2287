@@ -64,12 +64,13 @@ glm(resolution ~ victim_age + victim_sex + victim_race, family = binomial() , da
   select(term, odds_ratio, starts_with("CI")) %>% 
   knitr::kable(digits = 3)
 
+baltimore_logitstic
 ```
 
 ####  Fit a logistic regression on all the cities
 ```{r}
 models_results = homicide_df %>% 
-  mutate(victim_race = fct_relevel(victim_race, "White")) %>% #reordering to compare black victims to white victims
+  #mutate(victim_race = fct_relevel(victim_race, "White")) %>% #reordering to compare black victims to white victims
   nest(data = -city_state) %>% 
   mutate(
     models = map(.x = data, ~ glm(resolution ~ victim_age + victim_sex + victim_race, data = .x, family = binomial())),
@@ -97,14 +98,15 @@ models_results %>%
  theme(axis.text.x = element_text(angle = 60, vjust = 1.0, hjust = 1), legend.position = "none") + 
  geom_hline(yintercept=1, linetype="dashed", color = "red", size=0.5) +
   labs(
-    title = "Odds Ratio of case Resolution Status, by City",
-    subtitle  = "Comparing whether a homicide case is resolved for male Black victims to White victims, by City",
-    x = "Odds Ratio",
-    y = "City-States"
+    title = "Odds Ratio of Homicide case Resolution Status, by City",
+    subtitle  = "The odds ratio of case resolution, comparing male victims to female victims, controlling for age & sex",
+    y = "Odds Ratio",
+    x = "City-States"
   )  
 ```
 
-The estimated odds of a homicide case being resolved for male Black victims compared to the estimated odds of a homicide case being resolved for White victims is lowest is New York City, NY (with evidence of statistical significance); and highest in Albuquerque New Mexico, although this is not statistical significant. The former observation means that in New York City (as well as Baton Rouge, Louisiana; Omaha, Nebraska; Chicago, Illinois, and others whose Odds Ratio & and their 95% confidence interval is well below the dashed red line), if the homicide victims are Black, the likelihood that that case will be resolved is lower than if they were a white victim. However, this observation doesn't hold true in Boston, MA, Tampa, Florida, Atlanta, Georgia and other city-states whose odds ration and 95% confidence interval either crosses or is above the null value of odds ratio = 1 (indicated by the dashed red line.)
+
+The estimated odds of a homicide case being resolved for male victims compared to the estimated odds of a homicide case being resolved for female victims is lowest is New York City, NY (with evidence of statistical significance), adjusting for race, age; and highest in Albuquerque New Mexico, although this is not statistical significant. The former observation means that in New York City (as well as Baton Rouge, Louisiana; Omaha, Nebraska; Chicago, Illinois, and others whose Odds Ratio & and their 95% confidence interval is below the dashed red line), if the homicide victims are males, the likelihood that that case will be resolved is lower than if they were a female victim. However, this observation doesn't hold true in Boston, MA, Tampa, Florida, Atlanta, Georgia and other city-states whose odds ration and 95% confidence interval either crosses or is above the null value of odds ratio = 1 (indicated by the dashed red line.)
 
 
 ## Problem 2
@@ -134,6 +136,7 @@ baby_df =
         mrace == 8 ~ "Other",
         TRUE ~ ""
       ) %>% as.factor(),
+    mrace = fct_relevel(mrace, "Other"),
     delwt = delwt*453.592 %>% round(2),
     mheight = mheight*2.54 %>% round(2)
   )
@@ -157,11 +160,11 @@ None of the variables contain missing values
 
 #### Proposing an initial model for birthweight
 
-Hypothesis driving proposed model: 
+Hypothesis driven approach to build a model: 
 
-An infant's overall health depends on the overall health status of the mother and the mother's physical ability (without considering sociodemographic factors) play important roles in determining the baby's health, and indeed the baby's birthweight. I will treat three factors as proxies of the mother's health status and physical ability: mother's weight, height, and age. 
+An infant's overall health depends on the overall health status of the mother and the mother's physical ability (without considering sociodemographic factors) play important roles in determining the baby's health, and indeed the baby's birthweight. I will treat three factors as proxies of the mother's health status and physical ability: mother's `weight`, `height`, and `age`. 
 
-Therefore, I hypothesize that a baby's birhtweight can be explained by a linear relationship to a mother's weight, adjusting for height and age. I propose to build a linear models that attemps to describe this relationship. 
+Therefore, I hypothesize that a baby's `birhtweight` can be explained by a linear relationship to a mother's `weight`, adjusting for `height` and `age`. I propose to build a linear model that attempts to describe this relationship. 
 
 First, I will assess the linearity and normality assumption a `linear` model makes. 
 
@@ -177,12 +180,16 @@ baby_df %>%
     x = "Birthweight (in grams)"
   )
 ```
-The histogram of a baby birthweight in the data follows a normal distribution as shown above. 
 
-I will next assess the linearity assumption by plotting a scatter plot between the outcome variable `birthweight` and these three proposed predictors. 
+
+The histogram of a baby birth-weight in the data follows a normal distribution as shown above. 
+
 
 **Linearity Assumption**
-```{r, message=F, warning=F}
+
+I will next assess the linearity assumption by plotting a scatter plot between the outcome variable `birthweight` and these three continuous proposed predictors. 
+
+```{r, message=F, warning=F, fig.width=8}
 bwt_delwt = baby_df %>% 
   ggplot(aes(x = bwt, y = delwt)) + 
   geom_smooth(se = F) + 
@@ -222,19 +229,22 @@ In assessing the linearity assumption between birth-weight and both mother's `we
 
 #### Fitting the proposed Initial model
 
-####Fitting a smooth model
 ```{r}
 lin_fit = 
   baby_df %>% 
 lm(bwt ~ delwt + mheight + momage, data = .) 
 ```
-model summary
+
+**Model summary**
 ```{r}
 lin_fit %>% 
   broom::glance() %>% 
+  select(r.squared, adj.r.squared, sigma, statistic, p.value, df, nobs) %>% 
   knitr::kable(digits = 2)
 ```
-model estimates
+It appears that the initial model, with an r.squared value of 0.1, only explains about 10% of the variation in the outcome variable: baby's `birthweight`
+
+**Model estimates**
 ```{r}
 lin_fit %>% 
   broom::tidy() %>% 
@@ -249,6 +259,7 @@ baby_df %>%
   add_predictions(lin_fit) %>% 
   ggplot(aes(x = pred, y = resid)) + 
   geom_point(alpha = .2) + 
+  geom_smooth(se = F) + 
   labs(
     title = "Fitted Values Vs. Residuals (Initial Model)",
     x = "Model Predicted Birthweight",
@@ -256,23 +267,23 @@ baby_df %>%
   )
 ```
 
-The residuals appear to be evenly distributed for the most part, save for what appears to be a cluster at weight range 3000 - 3250 grams. 
+The residuals appear to be evenly distributed for the most part, save for what appears to be a cluster at weight range 3000 - 3250 grams, and a somewhat curved trend as the predicted birthweight increases. This perhaps indicates that the linear fit model has clear shortcomings when trying describe/predict birthweight, given the predictors the model is based off of. 
 
 
 #### Building two additional models with different predictors & compare to the initial model: 
 
 Two models: 
 
-One using length at birth and gestational age as predictors (main effects only)
-One using head circumference, length, sex, and all interactions (including the three-way interaction) between these
+* One using length at birth and gestational age as predictors (main effects only)
+* One using head circumference, length, sex, and all interactions (including the three-way interaction) between these
 ```{r}
-#model 2
+#model 2 - Main_Model 
 baby_df %>% 
 lm(bwt ~ blength + gaweeks, data = .) %>% 
   broom::tidy() %>% 
   knitr::kable(digits = 3)
 
-#model 3
+#model 3 - Interact_Model
 baby_df %>% 
   lm(bwt ~ bhead + blength + babysex + bhead*blength*babysex, data = .) %>% 
   broom::tidy() %>% 
@@ -300,19 +311,19 @@ Fit the 3 models to be compared on the training datasets and compute the RMSE va
 ```{r}
 cv_df = cv_df %>% 
   mutate(
-    model_1 = map(.x = train, ~lm(bwt ~ delwt + mheight + momage, data = .x)),
-    model_2 = map(.x = train, ~ lm(bwt ~ blength + gaweeks, data = .x)),
-    model_3 = map(.x = train, ~ lm(bwt ~ bhead + blength + babysex + bhead*blength*babysex, data = .x))
+    initial_model = map(.x = train, ~lm(bwt ~ delwt + mheight + momage, data = .x)),
+    main_model = map(.x = train, ~ lm(bwt ~ blength + gaweeks, data = .x)),
+    interact_model = map(.x = train, ~ lm(bwt ~ bhead + blength + babysex + bhead*blength*babysex, data = .x))
   ) %>% 
   mutate(
-    rmse_model_1 = map2_dbl(.x = model_1, .y = test, ~rmse(model = .x, data =.y)),
-    rmse_model_2 = map2_dbl(.x = model_2, .y = test, ~rmse(model = .x, data =.y)),
-    rmse_model_3 = map2_dbl(.x = model_3, .y = test, ~rmse(model = .x, data =.y))
+    rmse_initial_model = map2_dbl(.x = initial_model, .y = test, ~rmse(model = .x, data =.y)),
+    rmse_main_model = map2_dbl(.x = main_model, .y = test, ~rmse(model = .x, data =.y)),
+    rmse_interact_model = map2_dbl(.x = interact_model, .y = test, ~rmse(model = .x, data =.y))
   ) 
 ```
 
-Compare RMSE's of the `smooth` and `linear` model
-```{r, message=F}
+Compare RMSE's of the 3 models
+```{r, message=F, fig.width=8}
 #tidy the cross_validation dataframe first
 rmse_df = cv_df %>% 
   select(starts_with("rmse")) %>% 
@@ -343,7 +354,7 @@ rmse_df %>%
   )
 ```
 
-Of the 3 models built here the 3rd model (`bwt ~ bhead + blength + babysex + bhead*blength*babysex`) appears to be the best model to predict `birthweight`, using RMSE as a discriminator. 
+Of the 3 models built here the `interact_model` (`bwt ~ bhead + blength + babysex + bhead*blength*babysex`) appears to be the best model to predict `birthweight`, using RMSE as a discriminator. 
 
 
 Fit the best model
@@ -353,24 +364,27 @@ best_model =
   lm(bwt ~ bhead + blength + babysex + bhead*blength*babysex, data = .)
 
 best_model %>%
-  broom::tidy()
+  broom::tidy() %>% 
+  knitr::kable()
 ```
 
+
 Plotting residuals vs. fitted values - of the 
-```{r}
+```{r, message=F, warning=F}
 baby_df %>%  
   add_residuals(best_model) %>% 
   add_predictions(best_model) %>% 
   ggplot(aes(x = pred, y = resid)) + 
   geom_point(alpha = .2) + 
+  geom_smooth(se = F) + 
   labs(
-    title = "Fitted Values Vs. Residuals (3rd & best Model)",
+    title = "Fitted Values Vs. Residuals (Interact_Model)",
     x = "Model Predicted Birthweight",
     y = "Model Residuals"
   )
 ```
 
-The residuals appear to not be evenly distributed in the plot shown above. 
+The residuals appear to mostly evenly distributed in the plot shown above. 
 
 ## Problem 3
 
@@ -424,11 +438,12 @@ r_squred_distb %>%
 ```
 
 
+Plotting the distribution of the `r.squared` values obtained after bootstrapping
 
 ```{r}
 r_squred_distb %>% 
   ggplot(aes(x = r.squared)) + 
-  geom_histogram() + 
+   geom_density() + 
   labs(
     title = "Distribution of R squared",
     x = "R Squared",
@@ -436,7 +451,7 @@ r_squred_distb %>%
   ) 
 ```
 
-The R squared values we obtained from the `bootstrap` technique appears to be normally distributed. 
+The R squared values we obtained from the `bootstrap` technique appears to be normally distributed around the mean of: `r r_squred_distb %>% pull(r.squared) %>% mean()`, with a 95% Confidence Interval of (0.894, 0.93).
 
 
 #### Distribution of log(beta_0∗beta_1)
@@ -464,7 +479,8 @@ parameter_distb = bootstrap_df %>%
   ) 
 ```
 
-The 95% confidence interval for the log of the product of the estimated slope and intercept: log(beta_0∗beta_tmin). 
+The 95% confidence interval for the log of the product of the estimated slope and intercept: log(beta_0∗beta_tmin)
+
 ```{r}
 parameter_distb %>% 
   summarize(
@@ -474,11 +490,12 @@ parameter_distb %>%
   knitr::kable(digits = 4)
 ```
 
+Plotting the distribution of the `log(beta_0∗beta_tmin)` values obtained after bootstrapping
 
 ```{r}
 parameter_distb %>% 
   ggplot(aes(x = log_b0_b1)) + 
-  geom_histogram() + 
+  geom_density() +
   labs(
     title = "Distribution of Log(beta_0*beta_tmin)",
     x = "Log(Beta_0*Beta_tmin)",
@@ -486,7 +503,7 @@ parameter_distb %>%
   ) 
 ```
 
-The Log(beta_o*beta_tmin) values i.e., the distribution of the log of the product of the estimated intercept and estimated coefficient we obtained from the `bootstrap` technique also appear to be normally distributed. 
+The Log(beta_0*beta_tmin) values i.e., the distribution of the log of the product of the estimated intercept and estimated coefficient we obtained from the `bootstrap` technique also appear to be normally distributed. The mean value of `Log(beta_0 x beta_tmin)` is `r parameter_distb %>% pull(log_b0_b1) %>% mean() %>% round(2)`, with a 95% Confidence Interval of (`1.97`, `2.06`).
 
 
 
